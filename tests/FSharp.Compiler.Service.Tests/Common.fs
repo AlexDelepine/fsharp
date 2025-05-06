@@ -119,7 +119,6 @@ let mkProjectCommandLineArgsForScript (dllName, fileNames) =
         yield "--doc:test.xml"
         yield "--warn:3"
         yield "--fullpaths"
-        yield "--flaterrors"
         yield "--target:library"
         for x in fileNames do
             yield x
@@ -343,6 +342,16 @@ let rec allSymbolsInEntities compGen (entities: IList<FSharpEntity>) =
           yield! allSymbolsInEntities compGen entity.NestedEntities ]
 
 
+let getCursorPosAndPrepareSource (source: string) : string * string * pos =
+    let lines = source.Split([|"\r\n"; "\n"|], StringSplitOptions.None)
+    let line = lines |> Seq.findIndex _.Contains("{caret}")
+    let lineText = lines[line]
+    let column = lineText.IndexOf("{caret}")
+
+    let source = source.Replace("{caret}", "")
+    let lineText = lineText.Replace("{caret}", "")
+    source, lineText, Position.mkPos (line + 1) (column - 1)
+
 let getParseResults (source: string) =
     parseSourceCode("Test.fsx", source)
 
@@ -370,9 +379,15 @@ let inline dumpDiagnostics (results: FSharpCheckFileResults) =
     |> Array.map (fun e ->
         let message =
             e.Message.Split('\n')
-            |> Array.map (fun s -> s.Trim())
+            |> Array.map _.Trim()
+            |> Array.filter (fun s -> s.Length > 0)
             |> String.concat " "
         sprintf "%s: %s" (e.Range.ToString()) message)
+    |> List.ofArray
+
+let inline dumpDiagnosticNumbers (results: FSharpCheckFileResults) =
+    results.Diagnostics
+    |> Array.map (fun e -> e.Range.ToString(), e.ErrorNumber)
     |> List.ofArray
 
 let getSymbolUses (results: FSharpCheckFileResults) =
